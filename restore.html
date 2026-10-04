@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AFTERLIGHT 復元</title><style>body{margin:0;padding:32px;background:#111315;color:#eef0f2;font:18px system-ui,sans-serif}main{max-width:520px;margin:auto}button{padding:12px 20px;font:inherit}</style></head>
+<body><main><h1>AFTERLIGHT</h1><p id="status" role="status">古いアプリのキャッシュを消し、最初の版を開き直しています。</p><button id="retry" hidden>もう一度試す</button></main><script>
+async function restore(){
+ const status=document.getElementById('status'),retry=document.getElementById('retry');retry.hidden=true;
+ try{
+  const scope=new URL('./ripple/',location.href).href;
+  if('serviceWorker' in navigator){const registrations=await navigator.serviceWorker.getRegistrations();await Promise.all(registrations.filter(r=>r.scope===scope).map(r=>r.unregister()));}
+  if('caches' in window){const names=await caches.keys();await Promise.all(names.filter(n=>n.startsWith('afterlight-ripple-pwa-')).map(n=>caches.delete(n)));}
+  location.replace(new URL('./ripple/#receive',location.href).href);
+ }catch(e){status.textContent='読み込み直せませんでした。通信できる状態でもう一度試してください。';retry.hidden=false;}
+}
+document.getElementById('retry').onclick=restore;restore();
+</script></body></html>
