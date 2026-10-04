@@ -1,0 +1,12 @@
+import {projector} from './packet.mjs';
+export const SCREEN={w:760,h:760,x:60,y:60,dw:640,dh:640};
+export const MARKERS=[{x:30,y:30,color:[245,45,220]},{x:730,y:30,color:[245,230,35]},{x:730,y:730,color:[35,235,65]},{x:30,y:730,color:[25,230,245]}];
+export function paintMarkers(ctx){for(const m of MARKERS){ctx.fillStyle=`rgb(${m.color})`;ctx.fillRect(m.x-24,m.y-24,48,48);ctx.fillStyle='#050505';ctx.fillRect(m.x-8,m.y-8,16,16);}}
+function classify(r,g,b){if(r>65&&b>55&&r>g*1.45&&b>g*1.35)return 1;if(r>70&&g>65&&r>b*1.5&&g>b*1.5)return 2;if(g>65&&g>r*1.45&&g>b*1.3)return 3;if(g>65&&b>65&&g>r*1.45&&b>r*1.45&&g>b*.72&&b>g*.72)return 4;return 0;}
+// Colour connected components with a dark centre distinguish the four fiducials.
+export function detectMarkers(image){const {width:w,height:h,data}=image,n=w*h,labels=new Uint8Array(n),queue=new Int32Array(n),groups=[[],[],[],[]];for(let i=0;i<n;i++)labels[i]=classify(data[i*4],data[i*4+1],data[i*4+2]);
+for(let seed=0;seed<n;seed++){const label=labels[seed];if(!label)continue;let head=0,tail=1,sx=0,sy=0,brightness=0,minx=w,maxx=0,miny=h,maxy=0;queue[0]=seed;labels[seed]=0;while(head<tail){const at=queue[head++],x=at%w,y=(at/w)|0;sx+=x;sy+=y;brightness+=Math.max(data[at*4],data[at*4+1],data[at*4+2]);minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);for(const next of [x>0?at-1:-1,x<w-1?at+1:-1,y>0?at-w:-1,y<h-1?at+w:-1])if(next>=0&&labels[next]===label){labels[next]=0;queue[tail++]=next;}}
+const bw=maxx-minx+1,bh=maxy-miny+1;if(tail<12||bw<5||bh<5||bw/bh<.35||bw/bh>2.9||tail/(bw*bh)<.3)continue;const x=sx/tail,y=sy/tail,i=(Math.round(y)*w+Math.round(x))*4;if(Math.max(data[i],data[i+1],data[i+2])>brightness/tail*.65+15)continue;groups[label-1].push({x,y,area:tail});}
+for(const g of groups)g.sort((a,b)=>b.area-a.area).splice(4);if(groups.some(g=>!g.length))return[];
+const candidates=[];for(const a of groups[0])for(const b of groups[1])for(const c of groups[2])for(const d of groups[3]){const p=[a,b,c,d];const cross=p.map((v,i)=>{const q=p[(i+1)%4],r=p[(i+2)%4];return(q.x-v.x)*(r.y-q.y)-(q.y-v.y)*(r.x-q.x);});if(cross.some(v=>v<=0))continue;const area=p.reduce((s,v,i)=>s+v.x*p[(i+1)%4].y-v.y*p[(i+1)%4].x,0)/2;if(area<w*h*.025)continue;if(Math.max(...p.map(v=>v.area))>Math.min(...p.map(v=>v.area))*5)continue;const map=projector(p);const corners=[[60,60],[700,60],[700,700],[60,700]].map(([x,y])=>map((x-30)/700,(y-30)/700));candidates.push({points:corners,area});}return candidates.sort((a,b)=>b.area-a.area).slice(0,6).map(c=>c.points);
+}

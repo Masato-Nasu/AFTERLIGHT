@@ -1,0 +1,10 @@
+{
+  "name": "afterlight-ripple",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/pwa.test.mjs",
+    "test:optical": "node tests/ripple.test.mjs .tmp-ripple"
+  }
+}
