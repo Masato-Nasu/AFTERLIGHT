@@ -22,3 +22,10 @@ for(const shift of [2.1,2.3,2.5,2.7,2.9,3.1,3.3,3.5,3.7,3.9,4.1,4.3]){
 }
 assert.ok(recovered,'recover a CRC-valid packet that nominal alignment cannot read');
 console.log('PASS 114/115 missing index, completion with existing packet, baseline decode and bounded recovery');
+const gray76=generate(null,frames[75]).gray,data76=new Uint8ClampedArray(512*512*4);writePixels(gray76,data76);
+const image76={width:512,height:512,data:data76};let scaleRecovered=false;
+for(const scale of [1.004,1.008,1.012,1.016,1.02,1.024,1.028,1.032,1.036,1.04]){
+ const points=corners.map(p=>({x:256+(p.x-256)*scale,y:256+(p.y-256)*scale}));if(decodeCamera(image76,points))continue;
+ const tracker=new CameraTracker();for(let i=0;i<14;i++){const result=tracker.read(image76,()=>[points],i*300,true);if(result.frame){assert.deepEqual(result.frame,frames[75]);scaleRecovered=true;console.log(`PASS packet 76 size correction: ${scale}`);break;}}if(scaleRecovered)break;
+}
+assert.ok(scaleRecovered,'recover packet 76 with an inaccurate crop size');
