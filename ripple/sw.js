@@ -1,4 +1,4 @@
-const CACHE='afterlight-ripple-pwa-v1';
+const CACHE='afterlight-ripple-pwa-v2';
 const ASSETS=["./", "../style.css", "./app.mjs", "./camera-tracker.mjs", "./codec.mjs", "./crypto.mjs", "./export.mjs", "./fec.mjs", "./frame-store.mjs", "./generator.mjs", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon.svg", "./icons/maskable-512.png", "./manifest.webmanifest", "./markers.mjs", "./packet.mjs", "./palette.mjs", "./pwa.mjs", "./waves.mjs", "./worker.mjs"];
 const urls=ASSETS.map(p=>new URL(p,self.location).href);
 const allowed=new Set(urls);

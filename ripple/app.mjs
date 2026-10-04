@@ -2,11 +2,13 @@ import {writePixels} from './palette.mjs';
 import {FrameStore} from './frame-store.mjs?v=1.0';
 import {encryptMessage,decryptMessage,isEncrypted,MAX_TEXT_BYTES,MAX_TEXT_CHARS} from './crypto.mjs?v=1.0';
 import {recordVideo} from './export.mjs?v=1.0';
-import {encodeBytes,Receiver} from './packet.mjs?v=1.0';
+import {encodeBytes,Receiver} from './packet.mjs?v=1.2';
 import {paintMarkers,detectMarkers} from './markers.mjs?v=1.0';
-import {CameraTracker} from './camera-tracker.mjs?v=1.0';
+import {CameraTracker} from './camera-tracker.mjs?v=1.2';
 const tracker=new CameraTracker();
-const $=id=>document.getElementById(id),out=$('output'),ctx=out.getContext('2d'),view=$('cameraView'),vctx=view.getContext('2d',{willReadFrequently:true}),video=$('camera');let frameStore=null,painting=false;let mode='send',worker=null,prepared=[],active=false,started=0,index=-1,stream=null,epoch=0,lastSample=0,receiver=new Receiver(),wake=null,preparing=false,generation=0,complete=false,exporter=null,downloadURL=null,lastAttempt=null,decryptEpoch=0;
+const $=id=>document.getElementById(id),out=$('output'),ctx=out.getContext('2d'),view=$('cameraView'),vctx=view.getContext('2d',{willReadFrequently:true}),video=$('camera');let frameStore=null,painting=false;let mode='send',worker=null,prepared=[],active=false,started=0,index=-1,stream=null,epoch=0,lastSample=0,receiver=new Receiver(),wake=null,preparing=false,generation=0,complete=false,exporter=null,downloadURL=null,lastAttempt=null,decryptEpoch=0,lastReceived=0;
+const alignmentHelp='4つの目印と模様全体を映してください。位置は自動で合わせます。';
+function receiveHint(){const missing=receiver.missing();$('alignHelp').textContent=receiver.bytes?'全ての模様を受信しました。':receiver.parts.size&&missing.length<=10?`未受信：${missing.map(i=>i+1).join('、')}番 / ${receiver.total}枚。受信をリセットせず、動画を繰り返してください。`:alignmentHelp;}
 const frameCanvas=document.createElement('canvas');frameCanvas.width=frameCanvas.height=512;const fctx=frameCanvas.getContext('2d');const finder=document.createElement('canvas'),fc=finder.getContext('2d',{willReadFrequently:true});
 function count(){const n=new TextEncoder().encode($('message').value).length;$('byteCount').textContent=`${Array.from($('message').value).length.toLocaleString()} / 5,000文字 · ${n.toLocaleString()} bytes`;}count();$('message').oninput=count;
 async function awake(){try{wake=await navigator.wakeLock?.request('screen');}catch{}}
@@ -39,21 +41,21 @@ function cameraLoop(t,token){
     const {frame,points}=tracker.read(img,()=>{
      fc.drawImage(view,0,0,finder.width,finder.height);
      return detectMarkers(fc.getImageData(0,0,finder.width,finder.height)).map(candidate=>candidate.map(p=>({x:p.x*view.width/finder.width,y:p.y*view.height/finder.height})));
-    },t);
+    },t,receiver.parts.size>0&&receiver.bytes===null&&t-lastReceived>1500);
     if(points){vctx.strokeStyle='#a8d5ff';vctx.lineWidth=3;vctx.beginPath();points.forEach((p,i)=>i?vctx.lineTo(p.x,p.y):vctx.moveTo(p.x,p.y));vctx.closePath();vctx.stroke();}
     if(frame){
-     const prior=`${receiver.id}/${receiver.total}/${receiver.size}`;receiver.accept(frame);
+     const prior=`${receiver.id}/${receiver.total}/${receiver.size}`;const before=receiver.parts.size;receiver.accept(frame);if(receiver.parts.size>before||prior!==`${receiver.id}/${receiver.total}/${receiver.size}`)lastReceived=t;receiveHint();
      if(prior!==`${receiver.id}/${receiver.total}/${receiver.size}`){decryptEpoch++;lastAttempt=null;$('copy').disabled=true;$('receivedText').textContent='受信しています…';}
      $('progress').value=receiver.parts.size/receiver.total;$('packetCount').textContent=`${Math.round(receiver.parts.size/receiver.total*100)}%`;
      $('receiveStatus').textContent=receiver.bytes!==null?($('copy').disabled?'受信完了 · 復号待ち':'復号完了'):`波紋受信中 · ${receiver.parts.size} / ${receiver.total}`;
      if(receiver.bytes!==null)tryDecrypt();
-    }else if(receiver.bytes===null){$('receiveStatus').textContent=points?'模様を解析中 · 近づけて、少し静止してください':'4つの目印を探しています';}
+    }else if(receiver.bytes===null){$('receiveStatus').textContent=receiver.parts.size?`波紋受信中 · ${receiver.parts.size} / ${receiver.total}${t-lastReceived>1500?' · 読み取りを調整中':''}`:points?'模様を解析中 · 近づけて、少し静止してください':'4つの目印を探しています';}
    }
   }
  }catch(e){$('cameraError').textContent='読み取り処理でエラーが発生しました。カメラを起動し直してください。';stopCamera();return;}
  queueCamera(token);
 }
-$('reset').onclick=()=>{receiver.reset();tracker.reset();lastAttempt=null;decryptEpoch++;$('progress').value=0;$('packetCount').textContent='0%';$('receivedText').textContent='まだ受信していません。';$('copy').disabled=true;};$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('receivedText').textContent);$('copy').textContent='コピーしました';setTimeout(()=>{$('copy').textContent='コピー';},1800);}catch{$('cameraError').textContent='文章を長押ししてコピーしてください。';}};
+$('reset').onclick=()=>{receiver.reset();tracker.reset();lastReceived=0;receiveHint();lastAttempt=null;decryptEpoch++;$('progress').value=0;$('packetCount').textContent='0%';$('receivedText').textContent='まだ受信していません。';$('copy').disabled=true;};$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('receivedText').textContent);$('copy').textContent='コピーしました';setTimeout(()=>{$('copy').textContent='コピー';},1800);}catch{$('cameraError').textContent='文章を長押ししてコピーしてください。';}};
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopSend();stopCamera();}});window.addEventListener('pagehide',()=>{stopSend();stopCamera();frameStore?.dispose().catch(()=>{});});if(location.hash==='#receive')setMode('receive');
 
 async function tryDecrypt(force=false){if(!receiver.bytes)return;const bytes=receiver.bytes,password=$('receiveKey').value,signature=Array.from(bytes).join(',')+'|'+password;if(!force&&signature===lastAttempt)return;lastAttempt=signature;const token=++decryptEpoch;$('copy').disabled=true;$('receivedText').textContent='復号しています…';try{if(!isEncrypted(bytes)){if(receiver.text===null)throw Error('データを読み取れません。');$('receivedText').textContent=receiver.text;}else{if(!password){$('receivedText').textContent='暗号化された文章を受信しました。合い言葉を入力して「復号する」を押してください。';return;}const text=await decryptMessage(bytes,password);if(token!==decryptEpoch)return;$('receivedText').textContent=text;}$('receiveStatus').textContent='復号完了';$('copy').disabled=false;}catch(e){if(token!==decryptEpoch)return;$('receivedText').textContent=e.message;$('receiveStatus').textContent='受信完了 · 合い言葉を確認';}}

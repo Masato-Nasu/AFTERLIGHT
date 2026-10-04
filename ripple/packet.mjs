@@ -13,6 +13,7 @@ export function parseBits(values){if(values.length!==280)return null;const f=new
 export class Receiver{
  constructor(){this.reset();}
  reset(){this.id=null;this.total=0;this.size=0;this.parts=new Map();this.text=null;this.bytes=null;}
+ missing(){return Array.from({length:this.total},(_,i)=>i).filter(i=>!this.parts.has(i));}
  accept(f){if(!f)return false;const p=packetInfo(f);if(!p||!parseBits(bits(f)))return false;if(this.id!==p.id||this.total!==p.total||this.size!==p.size){this.reset();this.id=p.id;this.total=p.total;this.size=p.size;}this.parts.set(p.index,f.slice(p.offset,p.offset+p.size));if(this.parts.size===this.total&&!this.bytes){const a=new Uint8Array(this.total*p.size);for(const[i,part]of this.parts)a.set(part,i*p.size);const n=(a[0]<<8)|a[1];if(n>0&&n<=MAX_BYTES&&n+4<=a.length&&crc16(a.slice(2,n+2))===((a[n+2]<<8)|a[n+3])){this.bytes=a.slice(2,n+2);try{this.text=new TextDecoder('utf-8',{fatal:true}).decode(this.bytes);}catch{this.text=null;}}}return true;}
 }
 // Project a normalized rectangle into four camera points (TL, TR, BR, BL).
